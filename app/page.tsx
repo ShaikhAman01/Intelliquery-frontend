@@ -1,66 +1,124 @@
 'use client';
+
+import { Header } from '@/components/Layout/Header';
 import { Sidebar } from '@/components/Layout/Sidebar';
-import { Visualizer } from '@/components/Chat/Visualizer';
+import { QueryInput } from '@/components/Query/QueryInput';
+import { SQLDisplay } from '@/components/Query/SQLDisplay';
+import { ResultsPanel } from '@/components/Results/ResultsPanel';
+import { InsightsPanel } from '@/components/Results/InsightsPanel';
 import { useStore, Message } from '@/lib/store';
 import { api } from '@/lib/api';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, BarChart3 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { messages, addMessage, activeConnectionId, isLoading, setLoading } = useStore();
+  const { activeConnectionId, isLoading, setLoading } = useStore();
   const [input, setInput] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [sql, setSql] = useState('');
+  const [data, setData] = useState<Record<string, unknown>[]>([]);
+  const [explanation, setExplanation] = useState('');
+  const [activeTab, setActiveTab] = useState('results');
 
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
-
-  const handleSend = async () => {
+  const handleSubmit = async () => {
     if (!input.trim() || !activeConnectionId) return;
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: input, timestamp: new Date() };
-    addMessage(userMsg);
-    setInput('');
     setLoading(true);
+    setSql('');
+    setData([]);
 
     try {
-      const res = await api.post('/query/generate', null, { params: { user_query: userMsg.text, connection_id: activeConnectionId } });
-      addMessage({
-        id: (Date.now() + 1).toString(), role: 'ai',
-        text: res.data.visualization?.explanation || "Here is your data.",
-        data: res.data.data, visualization: res.data.visualization, sql: res.data.sql, timestamp: new Date()
+      const res = await api.post('/query/generate', null, { 
+        params: { user_query: input, connection_id: activeConnectionId } 
       });
+      setSql(res.data.sql || '');
+      setData(res.data.data || []);
+      setExplanation(res.data.visualization?.explanation || '');
     } catch (err) {
-      addMessage({ id: Date.now().toString(), role: 'ai', text: "Error executing query.", timestamp: new Date() });
+      console.error('Error generating query:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleTemplateClick = (template: string) => {
+    setInput(template);
+  };
+
   return (
     <div className="flex h-screen bg-background text-foreground">
+      {/* Sidebar for database connections */}
       <Sidebar />
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
-          {messages.length === 0 && <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50"><Bot size={48} className="mb-4" /><p>Select a database and ask a question.</p></div>}
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'ai' && <Avatar className="h-8 w-8"><AvatarFallback className="bg-primary text-primary-foreground"><Bot size={16} /></AvatarFallback></Avatar>}
-              <div className="max-w-[80%] space-y-4">
-                <Card className={`p-4 ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}><p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p></Card>
-                {msg.role === 'ai' && msg.data && <Card className="p-4 w-full h-[350px]"><Visualizer data={msg.data} config={msg.visualization || { chart_type: 'table' }} /></Card>}
-              </div>
-              {msg.role === 'user' && <Avatar className="h-8 w-8"><AvatarFallback className="bg-muted text-muted-foreground"><User size={16} /></AvatarFallback></Avatar>}
-            </div>
-          ))}
-          {isLoading && <div className="flex items-center gap-2 text-muted-foreground text-sm ml-12"><Loader2 className="animate-spin h-4 w-4" /> Analyzing...</div>}
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        
+        <main className="flex-1 flex overflow-hidden p-6 gap-6">
+        {/* Left Panel - Query Input */}
+        <div className="w-[400px] flex-shrink-0">
+          <div className="h-full bg-card rounded-xl p-6 border border-border glow-border">
+            <QueryInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              onTemplateClick={handleTemplateClick}
+              isLoading={isLoading}
+              disabled={!activeConnectionId}
+            />
+          </div>
         </div>
-        <div className="p-4 border-t bg-background/95 backdrop-blur"><div className="max-w-4xl mx-auto flex gap-2">
-          <Input placeholder="Ask a question..." value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} className="flex-1" disabled={!activeConnectionId || isLoading} />
-          <Button onClick={handleSend} disabled={!activeConnectionId || isLoading}><Send size={16} /></Button>
-        </div></div>
+
+        {/* Right Panel - SQL & Results */}
+        <div className="flex-1 flex flex-col gap-6 min-w-0">
+          {/* SQL Display */}
+          <div className="h-[280px] flex-shrink-0 bg-card rounded-xl p-6 border border-border">
+            <SQLDisplay sql={sql} />
+          </div>
+
+          {/* Results/Insights Tabs */}
+          <div className="flex-1 bg-card rounded-xl border border-border overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              <div className="px-6 pt-4 border-b border-border">
+                <TabsList className="bg-muted/50">
+                  <TabsTrigger 
+                    value="results" 
+                    className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
+                  >
+                    <Table className="h-4 w-4" />
+                    Results
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="insights"
+                    className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    Insights
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              
+              <div className="flex-1 p-6 overflow-hidden">
+                <TabsContent value="results" className="h-full m-0">
+                  <ResultsPanel data={data} />
+                </TabsContent>
+                <TabsContent value="insights" className="h-full m-0">
+                  <InsightsPanel data={data} explanation={explanation} />
+                </TabsContent>
+              </div>
+            </Tabs>
+          </div>
+        </div>
       </main>
+
+      </div>
+
+      {/* Connection Status - subtle banner instead of blocking overlay */}
+      {!activeConnectionId && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 z-50">
+          <p className="text-amber-400 text-sm">
+            💡 Connect a database from the sidebar to start generating queries
+          </p>
+        </div>
+      )}
     </div>
   );
 }
