@@ -6,33 +6,51 @@ import { QueryInput } from '@/components/Query/QueryInput';
 import { SQLDisplay } from '@/components/Query/SQLDisplay';
 import { ResultsPanel } from '@/components/Results/ResultsPanel';
 import { InsightsPanel } from '@/components/Results/InsightsPanel';
-import { useStore, Message } from '@/lib/store';
+import { ChartPanel } from '@/components/Chat/Visualizer';
+import { useStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, BarChart3 } from 'lucide-react';
+import { Table, BarChart3, Sparkles } from 'lucide-react';
+import { AuthGuard } from '@/lib/use-auth';
 
 export default function Dashboard() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
+  );
+}
+
+function DashboardContent() {
   const { activeConnectionId, isLoading, setLoading } = useStore();
   const [input, setInput] = useState('');
   const [sql, setSql] = useState('');
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [explanation, setExplanation] = useState('');
-  const [activeTab, setActiveTab] = useState('results');
+  const [chartRec, setChartRec] = useState<{ chart_type: string; reason?: string; } | undefined>();
+  const [activeTab, setActiveTab] = useState('chart');
 
   const handleSubmit = async () => {
     if (!input.trim() || !activeConnectionId) return;
     setLoading(true);
     setSql('');
     setData([]);
+    setChartRec(undefined);
 
     try {
-      const res = await api.post('/query/generate', null, { 
-        params: { user_query: input, connection_id: activeConnectionId } 
+      const res = await api.post('/query/generate', null, {
+        params: { user_query: input, connection_id: activeConnectionId }
       });
       setSql(res.data.sql || '');
       setData(res.data.data || []);
-      setExplanation(res.data.visualization?.explanation || '');
+      setExplanation(res.data.explanation || res.data.visualization?.explanation || '');
+      setChartRec(res.data.chart_recommendation || undefined);
+
+      // Auto-switch to chart tab when results arrive
+      if (res.data.data?.length > 0) {
+        setActiveTab('chart');
+      }
     } catch (err) {
       console.error('Error generating query:', err);
     } finally {
@@ -48,66 +66,76 @@ export default function Dashboard() {
     <div className="flex h-screen bg-background text-foreground">
       {/* Sidebar for database connections */}
       <Sidebar />
-      
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        
+
         <main className="flex-1 flex overflow-hidden p-6 gap-6">
-        {/* Left Panel - Query Input */}
-        <div className="w-[400px] flex-shrink-0">
-          <div className="h-full bg-card rounded-xl p-6 border border-border glow-border">
-            <QueryInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSubmit}
-              onTemplateClick={handleTemplateClick}
-              isLoading={isLoading}
-              disabled={!activeConnectionId}
-            />
-          </div>
-        </div>
-
-        {/* Right Panel - SQL & Results */}
-        <div className="flex-1 flex flex-col gap-6 min-w-0">
-          {/* SQL Display */}
-          <div className="h-[280px] flex-shrink-0 bg-card rounded-xl p-6 border border-border">
-            <SQLDisplay sql={sql} />
+          {/* Left Panel - Query Input */}
+          <div className="w-[400px] flex-shrink-0">
+            <div className="h-full bg-card rounded-xl p-6 border border-border glow-border">
+              <QueryInput
+                value={input}
+                onChange={setInput}
+                onSubmit={handleSubmit}
+                onTemplateClick={handleTemplateClick}
+                isLoading={isLoading}
+                disabled={!activeConnectionId}
+              />
+            </div>
           </div>
 
-          {/* Results/Insights Tabs */}
-          <div className="flex-1 bg-card rounded-xl border border-border overflow-hidden">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              <div className="px-6 pt-4 border-b border-border">
-                <TabsList className="bg-muted/50">
-                  <TabsTrigger 
-                    value="results" 
-                    className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
-                  >
-                    <Table className="h-4 w-4" />
-                    Results
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="insights"
-                    className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                    Insights
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-              
-              <div className="flex-1 p-6 overflow-hidden">
-                <TabsContent value="results" className="h-full m-0">
-                  <ResultsPanel data={data} />
-                </TabsContent>
-                <TabsContent value="insights" className="h-full m-0">
-                  <InsightsPanel data={data} explanation={explanation} />
-                </TabsContent>
-              </div>
-            </Tabs>
+          {/* Right Panel - SQL & Results */}
+          <div className="flex-1 flex flex-col gap-6 min-w-0">
+            {/* SQL Display */}
+            <div className="h-[280px] flex-shrink-0 bg-card rounded-xl p-6 border border-border">
+              <SQLDisplay sql={sql} />
+            </div>
+
+            {/* Results / Chart / Insights Tabs */}
+            <div className="flex-1 bg-card rounded-xl border border-border overflow-hidden">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                <div className="px-6 pt-4 border-b border-border">
+                  <TabsList className="bg-muted/50">
+                    <TabsTrigger
+                      value="chart"
+                      className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Chart
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="results"
+                      className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
+                    >
+                      <Table className="h-4 w-4" />
+                      Results
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="insights"
+                      className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary gap-2"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Insights
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <div className="flex-1 p-6 overflow-hidden">
+                  <TabsContent value="chart" className="h-full m-0">
+                    <ChartPanel data={data} chartRecommendation={chartRec as any} />
+                  </TabsContent>
+                  <TabsContent value="results" className="h-full m-0">
+                    <ResultsPanel data={data} />
+                  </TabsContent>
+                  <TabsContent value="insights" className="h-full m-0">
+                    <InsightsPanel data={data} explanation={explanation} />
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
 
       </div>
 

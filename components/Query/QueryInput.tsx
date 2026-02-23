@@ -2,6 +2,7 @@
 
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { VoiceInput } from '@/components/Query/VoiceInput';
 
 interface QueryInputProps {
   value: string;
@@ -27,12 +28,21 @@ export const QueryInput = ({
   isLoading,
   disabled
 }: QueryInputProps) => {
+  const handleTranscript = (text: string) => {
+    // Append transcript to existing text, or set it if empty
+    const newValue = value.trim() ? `${value.trim()} ${text}` : text;
+    onChange(newValue);
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h2 className="font-semibold text-foreground">Describe Your Query</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold text-foreground">Describe Your Query</h2>
+        </div>
+        <VoiceInput onTranscript={handleTranscript} disabled={disabled || isLoading} />
       </div>
 
       {/* Input Area */}
@@ -41,7 +51,7 @@ export const QueryInput = ({
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="e.g., Show me top customers by revenue..."
+            placeholder="e.g., Show me top customers by revenue... or click the mic to speak"
             className="w-full h-full resize-none bg-card border border-border rounded-lg p-4 
                        text-foreground placeholder:text-muted-foreground 
                        focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50

@@ -16,7 +16,7 @@ export function AddConnectionDialog() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '', db_type: 'postgres', host: 'localhost', port: '5432',
-    username: 'postgres', password: '', db_name: '', user_id: 1
+    username: 'postgres', password: '', db_name: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,9 +25,9 @@ export function AddConnectionDialog() {
     try {
       const res = await createConnection(formData);
       if (res.status === 'success') {
-        addConnection({ 
-          id: res.connection_id, name: formData.name, 
-          db_type: formData.db_type, host: formData.host 
+        addConnection({
+          id: res.connection_id, name: formData.name,
+          db_type: formData.db_type, host: formData.host
         });
         setOpen(false);
       }
@@ -55,7 +55,7 @@ export function AddConnectionDialog() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Name</Label><Input name="name" onChange={handleChange} required placeholder="My DB" /></div>
             <div className="space-y-2"><Label>Type</Label>
-              <Select onValueChange={(val) => setFormData({...formData, db_type: val})} defaultValue="postgres">
+              <Select onValueChange={(val) => setFormData({ ...formData, db_type: val })} defaultValue="postgres">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="postgres">PostgreSQL</SelectItem><SelectItem value="mysql">MySQL</SelectItem></SelectContent>
               </Select>

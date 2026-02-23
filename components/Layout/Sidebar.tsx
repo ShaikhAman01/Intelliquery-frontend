@@ -1,19 +1,20 @@
 'use client';
 import { useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import { getConnections } from '@/lib/api'; 
+import { getConnections } from '@/lib/api';
 import { AddConnectionDialog } from '@/components/Shared/AddConnectionDialog';
 import { Database, LayoutGrid, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
 
 export const Sidebar = () => {
   const { connections, activeConnectionId, setConnections, setActiveConnection } = useStore();
 
   useEffect(() => {
-    getConnections(1).then((data) => setConnections(data)).catch((err) => console.error(err));
+    getConnections().then((data) => setConnections(data)).catch((err) => console.error(err));
   }, []);
 
   return (
@@ -36,7 +37,13 @@ export const Sidebar = () => {
         </div>
       </ScrollArea>
       <Separator />
-      <div className="p-4"><Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground"><Settings size={16} /> Settings</Button></div>
+      <div className="p-4">
+        <Link href="/settings">
+          <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground">
+            <Settings size={16} /> Settings
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 };
