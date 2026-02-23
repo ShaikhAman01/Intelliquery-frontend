@@ -7,11 +7,12 @@ import { SQLDisplay } from '@/components/Query/SQLDisplay';
 import { ResultsPanel } from '@/components/Results/ResultsPanel';
 import { InsightsPanel } from '@/components/Results/InsightsPanel';
 import { ChartPanel } from '@/components/Chat/Visualizer';
+import { HistoryPanel } from '@/components/History/HistoryPanel';
 import { useStore } from '@/lib/store';
 import { api } from '@/lib/api';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, BarChart3, Sparkles } from 'lucide-react';
+import { Table, BarChart3, Sparkles, Clock, MessageSquarePlus } from 'lucide-react';
 import { AuthGuard } from '@/lib/use-auth';
 
 export default function Dashboard() {
@@ -30,6 +31,9 @@ function DashboardContent() {
   const [explanation, setExplanation] = useState('');
   const [chartRec, setChartRec] = useState<{ chart_type: string; reason?: string; } | undefined>();
   const [activeTab, setActiveTab] = useState('chart');
+  const [showHistory, setShowHistory] = useState(false);
+  const [querySource, setQuerySource] = useState('');
+  const [executionTime, setExecutionTime] = useState(0);
 
   const handleSubmit = async () => {
     if (!input.trim() || !activeConnectionId) return;
@@ -37,6 +41,8 @@ function DashboardContent() {
     setSql('');
     setData([]);
     setChartRec(undefined);
+    setQuerySource('');
+    setExecutionTime(0);
 
     try {
       const res = await api.post('/query/generate', null, {
@@ -46,6 +52,8 @@ function DashboardContent() {
       setData(res.data.data || []);
       setExplanation(res.data.explanation || res.data.visualization?.explanation || '');
       setChartRec(res.data.chart_recommendation || undefined);
+      setQuerySource(res.data.query_source || '');
+      setExecutionTime(res.data.execution_time_ms || 0);
 
       // Auto-switch to chart tab when results arrive
       if (res.data.data?.length > 0) {
@@ -62,6 +70,40 @@ function DashboardContent() {
     setInput(template);
   };
 
+  // Replay a query from history
+  const handleReplay = useCallback((question: string, historySql: string) => {
+    setInput(question);
+    setSql(historySql);
+    setShowHistory(false);
+    // Auto-submit the replayed query
+    if (activeConnectionId) {
+      setLoading(true);
+      setData([]);
+      setChartRec(undefined);
+      api.post('/query/generate', null, {
+        params: { user_query: question, connection_id: activeConnectionId }
+      }).then(res => {
+        setSql(res.data.sql || '');
+        setData(res.data.data || []);
+        setExplanation(res.data.explanation || res.data.visualization?.explanation || '');
+        setChartRec(res.data.chart_recommendation || undefined);
+        setQuerySource(res.data.query_source || '');
+        setExecutionTime(res.data.execution_time_ms || 0);
+        if (res.data.data?.length > 0) setActiveTab('chart');
+      }).catch(err => {
+        console.error('Replay failed:', err);
+      }).finally(() => {
+        setLoading(false);
+      });
+    }
+  }, [activeConnectionId, setLoading]);
+
+  // Ask follow-up (prefill with context hint)
+  const handleFollowUp = () => {
+    const prefix = data.length > 0 ? 'Based on the previous results, ' : '';
+    setInput(prefix);
+  };
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* Sidebar for database connections */}
@@ -71,9 +113,10 @@ function DashboardContent() {
         <Header />
 
         <main className="flex-1 flex overflow-hidden p-6 gap-6">
-          {/* Left Panel - Query Input */}
-          <div className="w-[400px] flex-shrink-0">
-            <div className="h-full bg-card rounded-xl p-6 border border-border glow-border">
+          {/* Left Panel - Query Input + History toggle */}
+          <div className="w-[400px] flex-shrink-0 flex flex-col gap-4">
+            {/* Query Input card */}
+            <div className={`bg-card rounded-xl p-6 border border-border glow-border ${showHistory ? 'flex-shrink-0' : 'flex-1'}`}>
               <QueryInput
                 value={input}
                 onChange={setInput}
@@ -83,6 +126,54 @@ function DashboardContent() {
                 disabled={!activeConnectionId}
               />
             </div>
+
+            {/* Context indicator + History toggle */}
+            <div className="flex items-center gap-2">
+              {/* Follow-up button */}
+              {data.length > 0 && (
+                <button
+                  onClick={handleFollowUp}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg
+                             bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                  Ask follow-up
+                </button>
+              )}
+
+              {/* Execution badge */}
+              {querySource && (
+                <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${querySource === 'DYNAMIC'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : 'bg-violet-500/10 text-violet-400'
+                  }`}>
+                  {querySource === 'DYNAMIC' ? '⚡' : '🤖'} {querySource}
+                  {executionTime > 0 && ` · ${executionTime}ms`}
+                </span>
+              )}
+
+              {/* History toggle */}
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${showHistory
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                History
+              </button>
+            </div>
+
+            {/* History panel (expandable) */}
+            {showHistory && (
+              <div className="flex-1 min-h-0 bg-card rounded-xl p-4 border border-border overflow-hidden">
+                <HistoryPanel
+                  connectionId={activeConnectionId}
+                  onReplay={handleReplay}
+                />
+              </div>
+            )}
           </div>
 
           {/* Right Panel - SQL & Results */}
