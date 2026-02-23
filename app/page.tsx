@@ -34,6 +34,7 @@ function DashboardContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [querySource, setQuerySource] = useState('');
   const [executionTime, setExecutionTime] = useState(0);
+  const [error, setError] = useState('');
 
   const handleSubmit = async () => {
     if (!input.trim() || !activeConnectionId) return;
@@ -43,6 +44,7 @@ function DashboardContent() {
     setChartRec(undefined);
     setQuerySource('');
     setExecutionTime(0);
+    setError('');
 
     try {
       const res = await api.post('/query/generate', null, {
@@ -59,8 +61,10 @@ function DashboardContent() {
       if (res.data.data?.length > 0) {
         setActiveTab('chart');
       }
-    } catch (err) {
-      console.error('Error generating query:', err);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Unknown error';
+      setError(detail);
+      console.error('Error generating query:', detail);
     } finally {
       setLoading(false);
     }
@@ -144,8 +148,8 @@ function DashboardContent() {
               {/* Execution badge */}
               {querySource && (
                 <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${querySource === 'DYNAMIC'
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'bg-violet-500/10 text-violet-400'
+                  ? 'bg-emerald-500/10 text-emerald-400'
+                  : 'bg-violet-500/10 text-violet-400'
                   }`}>
                   {querySource === 'DYNAMIC' ? '⚡' : '🤖'} {querySource}
                   {executionTime > 0 && ` · ${executionTime}ms`}
@@ -156,8 +160,8 @@ function DashboardContent() {
               <button
                 onClick={() => setShowHistory(!showHistory)}
                 className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${showHistory
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
               >
                 <Clock className="h-3.5 w-3.5" />
@@ -183,6 +187,13 @@ function DashboardContent() {
               <SQLDisplay sql={sql} />
             </div>
 
+            {/* Error Banner */}
+            {error && (
+              <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+                <span className="text-red-400 text-sm flex-1">{error}</span>
+                <button onClick={() => setError('')} className="text-red-400/60 hover:text-red-400 text-xs">✕</button>
+              </div>
+            )}
             {/* Results / Chart / Insights Tabs */}
             <div className="flex-1 bg-card rounded-xl border border-border overflow-hidden">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
