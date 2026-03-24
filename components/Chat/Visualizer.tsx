@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell,
@@ -10,8 +8,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   BarChart3, LineChartIcon, PieChartIcon, TrendingUp, LayoutGrid,
-  Maximize2, Minimize2, Download, Settings2, Table as TableIcon,
+  Maximize2, Minimize2, Download, ImageDown, Table as TableIcon,
+  ArrowDownNarrowWide, ArrowUpWideNarrow, Filter
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { motion, AnimatePresence } from 'motion/react';
 
 // ── Color palette (dark-theme friendly) ─────────────────────────────────
 const CHART_COLORS = [
@@ -47,14 +48,14 @@ const CHART_TYPE_OPTIONS: { type: ChartType; icon: React.ElementType; label: str
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border px-3 py-2 text-xs shadow-xl"
+    <div className="rounded-lg border px-3 py-2 text-xs shadow-xl min-w-[120px]"
       style={{ background: TOOLTIP_BG, borderColor: TOOLTIP_BORDER }}>
       <p className="font-medium text-slate-300 mb-1">{label}</p>
       {payload.map((entry: any, i: number) => (
         <p key={i} className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full" style={{ background: entry.color }} />
-          <span className="text-slate-400">{entry.name}:</span>
-          <span className="font-medium text-slate-200">
+          <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: entry.color }} />
+          <span className="text-slate-400 truncate max-w-[150px]">{entry.name}:</span>
+          <span className="font-medium text-slate-200 ml-auto">
             {typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}
           </span>
         </p>
@@ -70,6 +71,19 @@ export const ChartPanel = ({ data, chartRecommendation }: ChartPanelProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Controls state
+  const [sortKey, setSortKey] = useState<string>('none');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [limit, setLimit] = useState<string>('50');
+
+  // Reset state when data changes
+  useEffect(() => {
+    setSortKey('none');
+    setSortDir('desc');
+    setLimit('50');
+    setChartType(chartRecommendation?.chart_type || 'bar');
+  }, [data, chartRecommendation]);
+
   // Derive keys
   const { keys, xKey, numericKeys } = useMemo(() => {
     if (!data?.length) return { keys: [], xKey: '', numericKeys: [] };
@@ -79,6 +93,34 @@ export const ChartPanel = ({ data, chartRecommendation }: ChartPanelProps) => {
     );
     return { keys: k, xKey: k[0], numericKeys: nk.length > 0 ? nk : k.slice(1) };
   }, [data]);
+
+  // Processed Data
+  const processedData = useMemo(() => {
+    if (!data?.length) return [];
+    let result = [...data];
+
+    // Sort
+    if (sortKey && sortKey !== 'none') {
+      result.sort((a, b) => {
+        const valA = a[sortKey];
+        const valB = b[sortKey];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        const strA = String(valA ?? '');
+        const strB = String(valB ?? '');
+        return sortDir === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+
+    // Limit
+    const limitNum = parseInt(limit, 10);
+    if (!isNaN(limitNum) && limitNum > 0 && limitNum < result.length) {
+      result = result.slice(0, limitNum);
+    }
+
+    return result;
+  }, [data, sortKey, sortDir, limit]);
 
   // Fullscreen toggle
   const toggleFullscreen = useCallback(() => {
@@ -94,9 +136,9 @@ export const ChartPanel = ({ data, chartRecommendation }: ChartPanelProps) => {
 
   // Export CSV
   const exportCSV = useCallback(() => {
-    if (!data?.length) return;
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(row => Object.values(row).map(v => `"${v}"`).join(',')).join('\n');
+    if (!processedData?.length) return;
+    const headers = Object.keys(processedData[0]).join(',');
+    const rows = processedData.map(row => Object.values(row).map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([`${headers}\n${rows}`], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -104,7 +146,7 @@ export const ChartPanel = ({ data, chartRecommendation }: ChartPanelProps) => {
     a.download = `intelliquery-data-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [data]);
+  }, [processedData]);
 
   // Export PNG
   const exportPNG = useCallback(() => {
@@ -131,64 +173,135 @@ export const ChartPanel = ({ data, chartRecommendation }: ChartPanelProps) => {
 
   if (!data?.length) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Run a query to visualize results
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', bounce: 0.5 }}
+          className="p-4 rounded-full bg-primary/10 text-primary"
+        >
+          <BarChart3 className="h-8 w-8 opacity-80" />
+        </motion.div>
+        <p className="text-sm">Run a query to visualize results</p>
       </div>
     );
   }
 
   return (
     <div ref={containerRef}
-      className={`flex flex-col h-full ${isFullscreen ? 'bg-background p-6' : ''}`}>
+      className={`flex flex-col h-full ${isFullscreen ? 'bg-background p-6 z-[100] fixed inset-0' : ''}`}>
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-        {/* Chart type selector */}
-        <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1">
-          {CHART_TYPE_OPTIONS.map(({ type, icon: Icon, label }) => (
-            <button
-              key={type}
-              onClick={() => setChartType(type)}
-              title={label}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${chartType === type
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          {/* Chart type selector */}
+          <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1 mr-2">
+            {CHART_TYPE_OPTIONS.map(({ type, icon: Icon, label }) => (
+              <motion.button
+                key={type}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setChartType(type)}
+                title={label}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors duration-200 ${chartType === type
                   ? 'bg-primary/20 text-primary shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
+                  }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </motion.button>
+            ))}
+          </div>
+
+          {/* Sort Control */}
+          <div className="flex items-center gap-1.5 hidden sm:flex">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select value={sortKey} onValueChange={setSortKey}>
+              <SelectTrigger className="w-[120px] h-8 text-xs border-dashed">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Default order</SelectItem>
+                {keys.map((k) => (
+                  <SelectItem key={k} value={k}>{k}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {sortKey !== 'none' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground"
+                onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                title={`Sort ${sortDir}`}
+              >
+                {sortDir === 'desc' ? <ArrowDownNarrowWide className="h-4 w-4" /> : <ArrowUpWideNarrow className="h-4 w-4" />}
+              </Button>
+            )}
+          </div>
+
+          {/* Limit Control */}
+          <div className="hidden sm:block">
+            <Select value={limit} onValueChange={setLimit}>
+              <SelectTrigger className="w-[90px] h-8 text-xs border-dashed">
+                <SelectValue placeholder="Limit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">Top 10</SelectItem>
+                <SelectItem value="50">Top 50</SelectItem>
+                <SelectItem value="100">Top 100</SelectItem>
+                <SelectItem value="0">All Rows</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 ml-auto">
           {chartRecommendation?.reason && (
             <span className="text-[10px] text-muted-foreground mr-2 hidden md:inline">
               💡 {chartRecommendation.reason}
             </span>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={exportCSV} title="Export CSV">
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-          {chartType !== 'table' && chartType !== 'kpi' && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={exportPNG} title="Export PNG">
-              <Settings2 className="h-3.5 w-3.5" />
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={exportCSV} title="Export CSV">
+              <Download className="h-3.5 w-3.5" />
             </Button>
+          </motion.div>
+          {chartType !== 'table' && chartType !== 'kpi' && (
+            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={exportPNG} title="Export PNG">
+                <ImageDown className="h-3.5 w-3.5" />
+              </Button>
+            </motion.div>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFullscreen} title="Toggle fullscreen">
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </Button>
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFullscreen} title="Toggle fullscreen">
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+          </motion.div>
         </div>
       </div>
 
       {/* Chart area */}
-      <div className="flex-1 min-h-0">
-        {chartType === 'bar' && <BarChartView data={data} xKey={xKey} numericKeys={numericKeys} />}
-        {chartType === 'line' && <LineChartView data={data} xKey={xKey} numericKeys={numericKeys} />}
-        {chartType === 'area' && <AreaChartView data={data} xKey={xKey} numericKeys={numericKeys} />}
-        {chartType === 'pie' && <PieChartView data={data} xKey={xKey} numericKeys={numericKeys} />}
-        {chartType === 'kpi' && <KPIView data={data} keys={keys} />}
-        {chartType === 'table' && <TableView data={data} keys={keys} />}
+      <div className="flex-1 min-h-0 relative">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={chartType}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="h-full w-full"
+          >
+            {chartType === 'bar' && <BarChartView data={processedData} xKey={xKey} numericKeys={numericKeys} />}
+            {chartType === 'line' && <LineChartView data={processedData} xKey={xKey} numericKeys={numericKeys} />}
+            {chartType === 'area' && <AreaChartView data={processedData} xKey={xKey} numericKeys={numericKeys} />}
+            {chartType === 'pie' && <PieChartView data={processedData} xKey={xKey} numericKeys={numericKeys} />}
+            {chartType === 'kpi' && <KPIView data={processedData} keys={keys} />}
+            {chartType === 'table' && <TableView data={processedData} keys={keys} />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

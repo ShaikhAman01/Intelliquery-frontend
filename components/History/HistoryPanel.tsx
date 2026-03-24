@@ -22,6 +22,8 @@ interface HistoryPanelProps {
     onReplay: (question: string, sql: string) => void;
 }
 
+import { motion, AnimatePresence } from 'motion/react';
+
 export const HistoryPanel = ({ connectionId, onReplay }: HistoryPanelProps) => {
     const [entries, setEntries] = useState<HistoryEntry[]>([]);
     const [total, setTotal] = useState(0);
@@ -88,10 +90,10 @@ export const HistoryPanel = ({ connectionId, onReplay }: HistoryPanelProps) => {
         if (diffMins < 60) return `${diffMins}m ago`;
 
         const diffHrs = Math.floor(diffMins / 60);
-        if (diffHrs < 24) return `${diffHrs}h ago`;
+        if (diffHrs < 24) return `${diffHrs}m ago`;
 
         const diffDays = Math.floor(diffHrs / 24);
-        if (diffDays < 7) return `${diffDays}d ago`;
+        if (diffDays < 7) return `${diffDays}h ago`;
 
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
@@ -149,79 +151,86 @@ export const HistoryPanel = ({ connectionId, onReplay }: HistoryPanelProps) => {
                     </div>
                 )}
 
-                {filteredEntries.map((entry) => (
-                    <div
-                        key={entry.id}
-                        className="group relative rounded-lg border border-border/50 bg-card/50 p-3
-                       hover:border-primary/30 hover:bg-card transition-all duration-200 cursor-pointer"
-                        onClick={() => onReplay(entry.user_question, entry.generated_sql)}
-                    >
-                        {/* Question */}
-                        <p className="text-xs font-medium text-foreground line-clamp-2 pr-6 mb-1.5">
-                            {entry.user_question}
-                        </p>
+                <AnimatePresence>
+                    {filteredEntries.map((entry) => (
+                        <motion.div
+                            key={entry.id}
+                            layout
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0, padding: 0, border: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="group relative rounded-lg border border-border/50 bg-card/50 p-3
+                       hover:border-primary/30 hover:bg-card transition-all duration-200 cursor-pointer overflow-hidden"
+                            onClick={() => onReplay(entry.user_question, entry.generated_sql)}
+                        >
+                            {/* Question */}
+                            <p className="text-xs font-medium text-foreground line-clamp-2 pr-6 mb-1.5">
+                                {entry.user_question}
+                            </p>
 
-                        {/* Meta row */}
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                            {/* Status */}
-                            {entry.execution_status === 'SUCCESS' ? (
-                                <span className="flex items-center gap-0.5 text-emerald-400">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-0.5 text-red-400">
-                                    <XCircle className="h-3 w-3" />
-                                </span>
-                            )}
+                            {/* Meta row */}
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                {/* Status */}
+                                {entry.execution_status === 'SUCCESS' ? (
+                                    <span className="flex items-center gap-0.5 text-emerald-400">
+                                        <CheckCircle2 className="h-3 w-3" />
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-0.5 text-red-400">
+                                        <XCircle className="h-3 w-3" />
+                                    </span>
+                                )}
 
-                            {/* Source badge */}
-                            <span className={`px-1.5 py-0.5 rounded-full font-medium ${entry.generation_source === 'DYNAMIC'
+                                {/* Source badge */}
+                                <span className={`px-1.5 py-0.5 rounded-full font-medium ${entry.generation_source === 'DYNAMIC'
                                     ? 'bg-emerald-500/10 text-emerald-400'
                                     : 'bg-violet-500/10 text-violet-400'
-                                }`}>
-                                {entry.generation_source === 'DYNAMIC' ? '⚡' : '🤖'} {entry.generation_source}
-                            </span>
+                                    }`}>
+                                    {entry.generation_source === 'DYNAMIC' ? '⚡' : '🤖'} {entry.generation_source}
+                                </span>
 
-                            {/* Timing */}
-                            <span className="flex items-center gap-0.5">
-                                <Zap className="h-2.5 w-2.5" />
-                                {entry.execution_time_ms}ms
-                            </span>
+                                {/* Timing */}
+                                <span className="flex items-center gap-0.5">
+                                    <Zap className="h-2.5 w-2.5" />
+                                    {entry.execution_time_ms}ms
+                                </span>
 
-                            {/* Rows */}
-                            {entry.row_count > 0 && (
-                                <span>{entry.row_count} rows</span>
-                            )}
+                                {/* Rows */}
+                                {entry.row_count > 0 && (
+                                    <span>{entry.row_count} rows</span>
+                                )}
 
-                            {/* Time */}
-                            <span className="ml-auto">{formatTime(entry.timestamp)}</span>
-                        </div>
+                                {/* Time */}
+                                <span className="ml-auto">{formatTime(entry.timestamp)}</span>
+                            </div>
 
-                        {/* Actions (hidden until hover) */}
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onReplay(entry.user_question, entry.generated_sql);
-                                }}
-                                className="p-1 rounded hover:bg-primary/10 text-primary"
-                                title="Replay query"
-                            >
-                                <Play className="h-3 w-3" />
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(entry.id);
-                                }}
-                                className="p-1 rounded hover:bg-red-500/10 text-red-400"
-                                title="Delete"
-                            >
-                                <Trash2 className="h-3 w-3" />
-                            </button>
-                        </div>
-                    </div>
-                ))}
+                            {/* Actions (hidden until hover) */}
+                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onReplay(entry.user_question, entry.generated_sql);
+                                    }}
+                                    className="p-1 rounded hover:bg-primary/10 text-primary"
+                                    title="Replay query"
+                                >
+                                    <Play className="h-3 w-3" />
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(entry.id);
+                                    }}
+                                    className="p-1 rounded hover:bg-red-500/10 text-red-400"
+                                    title="Delete"
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </button>
+                            </div>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
 
                 {/* Load More */}
                 {entries.length < total && !search && (
